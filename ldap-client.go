@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"regexp"
 
 	"gopkg.in/ldap.v2"
 )
@@ -141,6 +142,14 @@ func (lc *LDAPClient) GetGroupsOfUser(username string) ([]string, error) {
 		return nil, err
 	}
 
+	// First bind with a read only user
+	if lc.BindDN != "" && lc.BindPassword != "" {
+		err := lc.Conn.Bind(lc.BindDN, lc.BindPassword)
+		if err != nil {
+			return false, nil, err
+		}
+	}
+
 	searchRequest := ldap.NewSearchRequest(
 		lc.Base,
 		ldap.ScopeWholeSubtree, ldap.NeverDerefAliases, 0, 0, false,
@@ -152,9 +161,22 @@ func (lc *LDAPClient) GetGroupsOfUser(username string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	groups := []string{}
-	for _, entry := range sr.Entries {
-		groups = append(groups, entry.GetAttributeValue("cn"))
+	//groups := []string{}
+
+	if len(sr.Entries) == 0 {
+		return nil, errors.New("No such user")
 	}
+	groups := sr.Entries[0].GetAttributeValues("memberOf")
+
+	// for _, entry := range sr.Entries {
+	// 	groups = append(groups, entry.GetAttributeValue("cn"))
+	// }
 	return groups, nil
+}
+
+// getGroupCN extracts CN from DN
+func getGroupCN(groupdn string) string {
+	re := regexp.MustCompile("CN=([^,]+)")
+	matches := re.FindStringSubmatch(groupdn)
+	return matches[1]
 }
